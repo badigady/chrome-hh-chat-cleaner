@@ -1,0 +1,170 @@
+{
+  "_meta": {
+    "what": "Обезличенные выдержки из НАСТОЯЩИХ ответов сервера hh.ru (снято 2026-10-09)",
+    "how": "GET https://chatik.hh.ru/chatik/api/chats?filterUnread=false&filterHasTextMessage=false&do_not_track_session_events=false",
+    "account": "аккаунт обезличен: числовые id, названия вакансий и компаний заменены на синтетические той же формы. Полный обход 2026-10-09: 915 элементов, из них NEGOTIATION 912, COMMON 2, SUPPORT 1",
+    "note": "Форма и структура ответа скопированы с живого ответа дословно: type, subType, archived: {\"@hidden\": false}, closedForApplicants, inboxPossibility, chatWritePossibility. Идентификаторы и названия вакансий/компаний заменены на синтетические, чтобы не публиковать реальные данные аккаунта; сами формы значений при этом не изменены. Правки в тестах касаются только выбора чатов, не данных."
+  },
+
+  "listItems": {
+    "5000000001": {
+      "id": "5000000001",
+      "type": "NEGOTIATION",
+      "currentParticipantId": "10000001",
+      "resources": { "NEGOTIATION_TOPIC": ["6000000001"], "RESUME": ["200000001"], "VACANCY": ["700000001"] },
+      "operations": { "allowed": ["LEAVE_CHAT", "DISABLE_NOTIFICATIONS"] },
+      "_display": { "title": "Должность A", "subtitle": "Компания A" }
+    },
+    "5000000002": {
+      "id": "5000000002",
+      "type": "NEGOTIATION",
+      "currentParticipantId": "10000001",
+      "resources": { "NEGOTIATION_TOPIC": ["6000000002"], "RESUME": ["200000001"], "VACANCY": ["700000002"] },
+      "operations": { "allowed": ["LEAVE_CHAT", "DISABLE_NOTIFICATIONS"] },
+      "_display": { "title": "Должность B", "subtitle": "Компания B" }
+    },
+    "5000000003": {
+      "id": "5000000003",
+      "type": "NEGOTIATION",
+      "currentParticipantId": "10000001",
+      "resources": { "NEGOTIATION_TOPIC": ["6000000003"], "RESPONSE_LETTER": ["0"], "RESUME": ["200000001"], "UNKNOWN": ["response"], "VACANCY": ["700000003"] },
+      "operations": { "allowed": ["LEAVE_CHAT", "DISABLE_NOTIFICATIONS"] },
+      "_display": { "title": "Должность C", "subtitle": "Компания C" }
+    },
+    "5000000004": {
+      "id": "5000000004",
+      "type": "NEGOTIATION",
+      "currentParticipantId": "10000001",
+      "resources": { "CHAT_PARTICIPANT": ["90000000001"], "NEGOTIATION_TOPIC": ["6000000004"], "RESPONSE_LETTER": ["0"], "RESUME": ["200000001"], "UNKNOWN": ["response"], "VACANCY": ["700000004"] },
+      "operations": { "allowed": ["LEAVE_CHAT", "DISABLE_NOTIFICATIONS"] },
+      "_display": { "title": "Должность D", "subtitle": "Компания D" }
+    },
+    "5000000005": {
+      "id": "5000000005",
+      "type": "NEGOTIATION",
+      "currentParticipantId": "10000001",
+      "resources": { "NEGOTIATION_TOPIC": ["6000000005"], "RESUME": ["200000001"], "VACANCY": ["700000005"] },
+      "operations": { "allowed": ["LEAVE_CHAT", "DISABLE_NOTIFICATIONS"] },
+      "_display": { "title": "Должность E", "subtitle": "Компания E" }
+    },
+
+    "5000000006": {
+      "_note": "COMMON, подтип WITHOUT_VACANCY — переписка без вакансии. Есть LEAVE_CHAT, но по типу не обрабатывается.",
+      "id": "5000000006",
+      "type": "COMMON",
+      "subType": "WITHOUT_VACANCY",
+      "blockInfo": null,
+      "currentParticipantId": "10000001",
+      "pinned": false,
+      "resources": { "EMPLOYER": ["3000001"], "RESUME": ["200000002"] },
+      "operations": { "allowed": ["LEAVE_CHAT", "DISABLE_NOTIFICATIONS"] }
+    },
+    "5000000007": {
+      "_note": "SUPPORT — обращение в поддержку. LEAVE_CHAT у него нет вовсе, но фильтр — по типу.",
+      "id": "5000000007",
+      "type": "SUPPORT",
+      "subType": null,
+      "blockInfo": null,
+      "currentParticipantId": "10000001",
+      "pinned": false,
+      "resources": {},
+      "operations": { "allowed": ["RATING", "DISABLE_NOTIFICATIONS"] }
+    }
+  },
+
+  "resources": {
+    "negotiation_topics": {
+      "6000000001": {
+        "currentApplicantState": "DISCARD",
+        "currentTopicType": "RESPONSE_BY_APPLICANT",
+        "initialApplicantState": "RESPONSE",
+        "initialTopicType": "RESPONSE_BY_APPLICANT",
+        "resumeId": 200000001,
+        "topicId": 6000000001,
+        "vacancyId": 700000001
+      },
+      "6000000002": {
+        "currentApplicantState": "DISCARD",
+        "currentTopicType": "RESPONSE_BY_APPLICANT",
+        "initialApplicantState": "RESPONSE",
+        "initialTopicType": "RESPONSE_BY_APPLICANT",
+        "resumeId": 200000001,
+        "topicId": 6000000002,
+        "vacancyId": 700000002
+      },
+      "6000000003": {
+        "currentApplicantState": "RESPONSE",
+        "currentTopicType": "RESPONSE_BY_APPLICANT",
+        "initialApplicantState": "RESPONSE",
+        "initialTopicType": "RESPONSE_BY_APPLICANT",
+        "resumeId": 200000001,
+        "topicId": 6000000003,
+        "vacancyId": 700000003
+      },
+      "6000000004": {
+        "currentApplicantState": "RESPONSE",
+        "currentTopicType": "RESPONSE_BY_APPLICANT",
+        "initialApplicantState": "RESPONSE",
+        "initialTopicType": "RESPONSE_BY_APPLICANT",
+        "resumeId": 200000001,
+        "topicId": 6000000004,
+        "vacancyId": 700000004
+      },
+      "6000000005": {
+        "currentApplicantState": "RESPONSE",
+        "currentTopicType": "RESPONSE_BY_APPLICANT",
+        "initialApplicantState": "RESPONSE",
+        "initialTopicType": "RESPONSE_BY_APPLICANT",
+        "resumeId": 200000001,
+        "topicId": 6000000005,
+        "vacancyId": 700000005
+      }
+    },
+
+    "vacancies": {
+      "700000001": {
+        "vacancyId": 700000001,
+        "name": "Должность A",
+        "closedForApplicants": false,
+        "inboxPossibility": true,
+        "chatWritePossibility": "ENABLED_AFTER_INVITATION"
+      },
+      "700000002": {
+        "vacancyId": 700000002,
+        "name": "Должность B",
+        "closedForApplicants": false,
+        "inboxPossibility": true,
+        "chatWritePossibility": "ENABLED_AFTER_INVITATION"
+      },
+      "700000003": {
+        "vacancyId": 700000003,
+        "name": "Должность C",
+        "closedForApplicants": false,
+        "inboxPossibility": true,
+        "chatWritePossibility": "ENABLED_AFTER_INVITATION",
+        "archived": { "@hidden": false }
+      },
+      "700000004": {
+        "vacancyId": 700000004,
+        "name": "Должность D",
+        "closedForApplicants": false,
+        "inboxPossibility": true,
+        "chatWritePossibility": "ENABLED_AFTER_INVITATION"
+      },
+      "700000005": {
+        "vacancyId": 700000005,
+        "name": "Должность E",
+        "closedForApplicants": false,
+        "inboxPossibility": true,
+        "chatWritePossibility": "ENABLED_AFTER_INVITATION"
+      }
+    }
+  },
+
+  "bulkLeaveResponse": {
+    "_meta": "Обезличенный боевой POST /chatik/api/bulk/leave {\"chatIds\":[\"5000000008\"]} — форма ответа сохранена, id заменён",
+    "status": 200,
+    "contentType": "application/json",
+    "body": { "applied": ["5000000008"], "rejected": [] }
+  }
+}
