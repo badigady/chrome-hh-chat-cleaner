@@ -16,7 +16,7 @@
 - The extension's "triggers" are only: (1) initial entry to the chat page, (2) the site itself loading the next batch. Cursor scrolling by the user without a batch load does nothing — `docs/bulk-leave.md` §5.4 describes the **site's** flow, which the extension merely follows.
 - `_display` (title/subtitle) is present on **NEGOTIATION items only** in the list response (COMMON/SUPPORT items lack it) — a fast visual id of a negotiation chat without even reading `type` (`test/fixtures/live.json:16` vs `52-70`).
 - `test/fixtures/live.json` is anonymized: ids (5000000001...) and vacancy/company names are synthetic of the same shape; the `UNKNOWN` resource key is real server quirk, not a fixture artifact.
-- The repo has **no** `package.json`, no lint config, no CI workflows (`.github/` contains only the README copy) — "no build" is the actual build system, intentional for Chrome Web Store compatibility (no external code in the package).
+- The repo has **no** `package.json`, no lint config, no CI workflows (`.github/` contains only the README copy) — "no build" is the actual build system: the repo root is the extension itself, all files are first-party and nothing external is bundled.
 
 ## History that explains design
 
