@@ -26,4 +26,4 @@
 - Auth is the browser's own session cookies on hh.ru (`credentials: 'include'`); no tokens needed. Reproducing server behavior requires a logged-in Chrome profile on `hh.ru/chat`.
 - `window.globalServiceVars` is injected by the page; in a fresh/framed context it may be absent — both reads of it in `cleaner.js` (getXsrf, `cleaner.js:105-115`) are defensive and return an empty token in that case.
 - `types/global.d.ts` exists only for the `tsc -p jsconfig.json` pass; runtime behavior is unaffected by it.
-- `.cixignore` hides `.roo/` and `test/` (along with `README.md`, `manifest.json`, `icons/`, `.github/`, `PRIVACY.md`, `jsconfig.json`) from the CIX context — when debugging with context via CIX those files are absent from it; read them explicitly if you need the project rules or fixtures.
+- `.cixignore` hides `.roo/` and `test/` (along with `README.md`, `manifest.json`, `icons/`, `.github/`, `jsconfig.json`) from the CIX context — when debugging with context via CIX those files are absent from it; read them explicitly if you need the project rules or fixtures.

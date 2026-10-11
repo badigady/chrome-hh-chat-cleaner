@@ -2,7 +2,6 @@
 .roo/
 icons/
 test/
-PRIVACY.md
 README.md
 jsconfig.json
 manifest.json

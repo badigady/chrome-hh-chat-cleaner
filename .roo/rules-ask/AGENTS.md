@@ -5,7 +5,6 @@
 - `README.md` is the primary source: both criteria, the "no uncertainty" rule, how it works, the 2026-10-09 live-acceptance results, and the two acceptance bugs. It is more detailed than the code comments in places (e.g. the third auto-left chat story).
 - `.github/README.md` is a **shortened marketing copy** of `README.md` (GitHub repo front page). It intentionally omits setup/test details; the two are separate documents, not auto-generated — if you change behavior, check which one each claim belongs to.
 - `docs/bulk-leave.md` is the technical spec of `POST /chatik/api/bulk/leave`, with every claim labeled `VERIFIED` / `INFERRED` / `NOT VERIFIED`. Quote it with labels; the important `NOT VERIFIED` items are: the element type inside `rejected`, whether `X-Xsrftoken` is server-mandatory, error bodies/status codes, server-side limits on `chatIds` size.
-- `PRIVACY.md` is the public privacy policy and is version-locked with the extension (header states the version; update it together in the release).
 - The big Russian comment blocks in `cleaner.js:1-57` and `verdicts.js:1-49` are the canonical in-code description of behavior — they are written at acceptance quality and mirror `README.md`; keep them in sync with behavior changes.
 
 ## Misleading names / counterintuitive organization
