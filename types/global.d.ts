@@ -22,7 +22,7 @@
 //                       в главном мире страницы chrome.runtime отсутствует.
 //                       cleaner.js по этому признаку определяет мир запуска.
 
-import type * as Verdicts from '../verdicts.js';
+import type * as Verdicts from '../src/verdicts.js';
 
 type FetchFn = typeof fetch;
 

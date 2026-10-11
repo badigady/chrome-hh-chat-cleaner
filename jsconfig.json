@@ -10,6 +10,6 @@
     "strict": false,
     "types": []
   },
-  "include": ["cleaner.js", "verdicts.js", "types/**/*.d.ts"],
+  "include": ["src/cleaner.js", "src/verdicts.js", "types/**/*.d.ts"],
   "exclude": ["node_modules", "test", "icons"]
 }

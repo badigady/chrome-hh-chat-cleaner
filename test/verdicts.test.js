@@ -21,7 +21,7 @@
 const assert = require('assert');
 const path = require('path');
 
-const V = require(path.join(__dirname, '..', 'verdicts.js'));
+const V = require(path.join(__dirname, '..', 'src', 'verdicts.js'));
 const FX = require(path.join(__dirname, 'fixtures', 'live.json'));
 
 let passed = 0;
