@@ -217,8 +217,8 @@ test('без слияния признаки не находятся — это 
 
 console.log('\nтексты плашки');
 
-test('сообщение о старте — фиксированный текст', () => {
-  assert.strictEqual(V.START_MESSAGE, 'hh: работает автоматическая очистка чатов');
+test('сообщение «чатов для покидания не нашлось» — фиксированный текст', () => {
+  assert.strictEqual(V.NO_CHATS_MESSAGE, 'не найдено чатов для покидания');
 });
 
 test('склонение по числу: 1 чат, 3 чата, 5 чатов, 21 чат', () => {
@@ -231,9 +231,10 @@ test('склонение по числу: 1 чат, 3 чата, 5 чатов, 21
 });
 
 test('сообщение о покидании согласует число', () => {
-  assert.strictEqual(V.leftMessage(1), 'hh: покинуто 1 чат');
-  assert.strictEqual(V.leftMessage(3), 'hh: покинуто 3 чата');
-  assert.strictEqual(V.leftMessage(5), 'hh: покинуто 5 чатов');
+  assert.strictEqual(V.leftMessage(1), 'Покинуто 1 чат');
+  assert.strictEqual(V.leftMessage(3), 'Покинуто 3 чата');
+  assert.strictEqual(V.leftMessage(5), 'Покинуто 5 чатов');
+  assert.strictEqual(V.leftMessage(21), 'Покинуто 21 чат');
 });
 
 console.log('\nитог');

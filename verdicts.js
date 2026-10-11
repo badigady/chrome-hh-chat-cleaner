@@ -76,7 +76,10 @@
    * него нет. Тексты держим здесь, среди чистых функций, чтобы их можно
    * было проверить в node (test/verdicts.test.js), без DOM и таймеров.
    */
-  var START_MESSAGE = 'hh: работает автоматическая очистка чатов';
+  // формы слова «чат» для текста плашки о покидании
+  var LEFT_FORMS = { one: 'чат', few: 'чата', many: 'чатов' };
+  // зелёная плашка, когда чатов для покидания не нашлось
+  var NO_CHATS_MESSAGE = 'не найдено чатов для покидания';
 
   function plural(n, one, few, many) {
     var m10 = n % 10, m100 = n % 100;
@@ -85,8 +88,10 @@
     return many;
   }
 
+  // красная плашка: сколько чатов реально покинуто по ответу /bulk/leave
   function leftMessage(n) {
-    return 'hh: покинуто ' + n + ' ' + plural(n, 'чат', 'чата', 'чатов');
+    return 'Покинуто ' + n + ' ' +
+      plural(n, LEFT_FORMS.one, LEFT_FORMS.few, LEFT_FORMS.many);
   }
 
   function assign(target, source) {
@@ -191,7 +196,8 @@
   return {
     REFUSAL_STATE: REFUSAL_STATE,
     CHAT_TYPE: CHAT_TYPE,
-    START_MESSAGE: START_MESSAGE,
+    LEFT_FORMS: LEFT_FORMS,
+    NO_CHATS_MESSAGE: NO_CHATS_MESSAGE,
     plural: plural,
     leftMessage: leftMessage,
     isNegotiation: isNegotiation,

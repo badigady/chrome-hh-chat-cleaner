@@ -3,15 +3,21 @@
 //   HhVerdicts        — вешается самим verdicts.js (строка 54: root.HhVerdicts = api).
 //                       Тип берётся из UMD-экспорта verdicts.js, поэтому список
 //                       методов не дублируется: переименуете метод — ошибка
-//                       появится здесь же, а не в трёх местах.
+//                       появится здесь же, а не в трёх местах. Текущий API:
+//                       LEFT_FORMS, NO_CHATS_MESSAGE, plural, leftMessage,
+//                       isNegotiation, refusalReason, archivedReason,
+//                       listReasons, canLeave, buildChats, newScan,
+//                       accumulatePage. Старая START_MESSAGE удалена:
+//                       стартовой плашки «работает автоматическая очистка»
+//                       больше нет.
 //
 //   globalServiceVars — приходит со стороны сайта hh.ru, расширением не создаётся.
-//                       В cleaner.js читается defensively (строки 127-129),
+//                       В cleaner.js читается defensively (getXsrf),
 //                       поэтому каждое поле — необязательное.
 //
-//   __hhHooked / __hhListRequest / __hhCursor — метки расширения на прототипах.
-//                       Их ставит hookXHR/hookFetch: не перехватить XHR дважды,
-//                       помнить, запрос какой страницы перехвачен. Нативные
+//   __hhHooked / __hhListRequest — метки расширения на прототипах.
+//                       Их ставит hookXHR/hookFetch: не перехватить XHR/fetch
+//                       дважды, помнить, что запрос — загрузка списка. Нативные
 //                       объекты браузера таких полей не имеют — объявляем,
 //                       иначе каждое обращение даёт ошибку TS2339.
 //
@@ -36,7 +42,6 @@ declare global {
   interface XMLHttpRequest {
     __hhHooked?: boolean;
     __hhListRequest?: boolean;
-    __hhCursor?: string | null;
   }
 }
 
