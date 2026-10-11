@@ -37,9 +37,9 @@
  * Поводы 2 и 3 намеренно не зависят от «мира» content script. Список у
  * сайта виртуализирован (строки пересоздаются при прокрутке), поэтому
  * слушаются прокрутка контейнера (capture-фаза — событие scroll не
- * всплывает), изменения DOM внутри контейнера и рост высоты прокрутки
- * (scrollHeight) — последний опрашивается раз в полторы секунды и не
- * зависит ни от событий, ни от исполнения "world": "MAIN". Перехват
+ * всплывает), изменения DOM внутри контейнера и — самый надёжный сигнал,
+ * который браузер не может «проглотить», — раз в полторы секунды
+ * читаются scrollTop (прокрутили) и scrollHeight (догрузили). Перехват
  * XMLHttpRequest/fetch оставлен как дополнительный, быстрый повод там,
  * где он работает. Смена адреса внутри приложения отслеживается опросом
  * location.href — тоже из любого мира.
@@ -122,14 +122,14 @@
 
   function getJSON(url) {
     scanRequests++;
-    return fetch(url, { credentials: 'include' }).then(function (r) {
+    return withTimeout(fetch(url, { credentials: 'include' }).then(function (r) {
       scanRequests--;
       if (!r.ok) throw new Error('HTTP ' + r.status + ' на ' + tag(url));
       return r.json();
     }, function (e) {
       scanRequests--;
       throw e;
-    });
+    }), REQUEST_MS);
   }
 
   var xsrfToken = null;
@@ -149,7 +149,7 @@
   }
 
   function postJSON(url, body) {
-    return fetch(url, {
+    return withTimeout(fetch(url, {
       method: 'POST',
       credentials: 'include',
       headers: {
@@ -167,11 +167,24 @@
         if (parsed === null) throw new Error('нечитаемый ответ на ' + tag(url));
         return parsed;
       });
-    });
+    }), REQUEST_MS);
   }
 
   function sleep(ms) {
     return new Promise(function (res) { setTimeout(res, ms); });
+  }
+
+  // Потолок на один запрос: если ответ не пришёл, обход падает ошибкой и
+  // следующая активность запустит его заново — а не висит молча навсегда
+  // (зависший обход блокировал бы все последующие поводы).
+  var REQUEST_MS = 20000;
+
+  function withTimeout(promise, ms) {
+    return new Promise(function (resolve, reject) {
+      var t = setTimeout(function () { reject(new Error('нет ответа ' + ms + ' мс')); }, ms);
+      promise.then(function (v) { clearTimeout(t); resolve(v); },
+                   function (e) { clearTimeout(t); reject(e); });
+    });
   }
 
   /* ------------------------------------------------------------------ */
@@ -425,16 +438,33 @@
   var running = false;
   var announced = false;
   var pendingWhy = null;
+  var fireAt = 0;
+  var rescheduleAfter = false;
+  var lastLoggedWhy = null;
+  var lastReasonLogAt = 0;
 
-  // Свести все поводы к одному отложенному проходу. Каждая новая активность
-  // перезапускает отсчёт («дебаунс»): обход идёт только после того, как
-  // список успокоился, и не чаще MIN_INTERVAL_MS.
+  // Свести все поводы к одному отложенному проходу. Время обхода назначается
+  // по ПЕРВОМУ поводу пачки и не отодвигается следующими («дебаунс с
+  // потолком»): непрерывная прокрутка не сбрасывает таймер бесконечно.
+  // Обход стартует через SETTLE_MS после первого повода (или раньше, если
+  // с прошлого обхода уже прошло MIN_INTERVAL_MS) — даже если список всё ещё
+  // листают.
   function schedule(why) {
     if (!isChatPage()) return;
     pendingWhy = why;
-    if (running) return;
+    var now = Date.now();
+    // Повод пишем в лог, когда он сменился или повторился после паузы —
+    // иначе непрерывная прокрутка зальёт консоль одинаковыми строками.
+    if (why !== lastLoggedWhy || now - lastReasonLogAt > 10000) {
+      lastLoggedWhy = why;
+      lastReasonLogAt = now;
+      dbg('повод: ' + why);
+    }
+    if (running) { rescheduleAfter = true; return; }
+    var fire = Math.max(now + SETTLE_MS, lastRunAt + MIN_INTERVAL_MS);
+    if (pendingTimer && fire >= fireAt) return; // пачка уже учтена
     if (pendingTimer) clearTimeout(pendingTimer);
-    var wait = Math.max(SETTLE_MS, MIN_INTERVAL_MS - (Date.now() - lastRunAt));
+    fireAt = fire;
     pendingTimer = setTimeout(function () {
       pendingTimer = null;
       if (running) return;
@@ -442,9 +472,13 @@
       lastRunAt = Date.now();
       var w = pendingWhy;
       dbg('старт обхода (' + w + ')');
-      var done = function () { running = false; };
+      var done = function () {
+        running = false;
+        // поводы, пришедшие во время обхода, не теряются
+        if (rescheduleAfter) { rescheduleAfter = false; schedule(pendingWhy); }
+      };
       runCycle(w).then(done, done);
-    }, wait);
+    }, fire - now);
   }
 
   // Повод к работе: сначала обещанная плашка о старте (один раз за вход),
@@ -568,29 +602,30 @@
     dbg('наблюдаю за контейнером списка');
   }
 
-  var lastListHeight = null;
+  var lastListSig = null; // {el, h, t} — отметка последней проверки контейнера
 
-  // Самый надёжный, не зависящий от событий и от «мира» сигнал догрузки:
-  // высота прокрутки контейнера (scrollHeight) растёт, когда сайт подгрузил
-  // очередную порцию чатов. Простая прокрутка внутри уже загруженного
-  // (scrollTop) её не меняет — ложных поводов нет. Опрос дёшев: одно чтение
-  // свойства раз в полторы секунды.
-  function checkListGrowth() {
+  // Самый надёжный, не зависящий от событий и от «мира» сигнал активности
+  // списка: прокрутка меняет scrollTop, догрузка — scrollHeight. Чтение двух
+  // свойств раз в полторы секунды браузер «проглотить» не может, в отличие
+  // от событий scroll и мутаций.
+  function checkListActivity() {
     ensureListObserver();
     var el = document.querySelector('[class*="scroll-container"]');
     if (!el) return;
-    var h = el.scrollHeight;
-    if (lastListHeight !== null && h > lastListHeight) {
-      schedule('список догрузился');
+    var h = el.scrollHeight, t = el.scrollTop;
+    var sig = lastListSig;
+    if (sig && sig.el === el) {
+      if (h > sig.h) schedule('список догрузился');
+      else if (t !== sig.t) schedule('список пролистан');
     }
-    lastListHeight = h;
+    lastListSig = { el: el, h: h, t: t };
   }
 
   function watchList() {
     watchScroll();
     ensureListObserver();
-    checkListGrowth(); // запомнить начальную высоту
-    setInterval(checkListGrowth, 1500);
+    checkListActivity(); // запомнить отметку
+    setInterval(checkListActivity, 1500);
   }
 
   // Смена адреса внутри SPA — опросом, чтобы не зависеть от main-world.
