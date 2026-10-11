@@ -194,15 +194,10 @@
   }
 
   return {
-    REFUSAL_STATE: REFUSAL_STATE,
-    CHAT_TYPE: CHAT_TYPE,
-    LEFT_FORMS: LEFT_FORMS,
     NO_CHATS_MESSAGE: NO_CHATS_MESSAGE,
     plural: plural,
     leftMessage: leftMessage,
     isNegotiation: isNegotiation,
-    refusalReason: refusalReason,
-    archivedReason: archivedReason,
     listReasons: listReasons,
     canLeave: canLeave,
     buildChats: buildChats,

@@ -4,12 +4,9 @@
 //                       Тип берётся из UMD-экспорта verdicts.js, поэтому список
 //                       методов не дублируется: переименуете метод — ошибка
 //                       появится здесь же, а не в трёх местах. Текущий API:
-//                       LEFT_FORMS, NO_CHATS_MESSAGE, plural, leftMessage,
-//                       isNegotiation, refusalReason, archivedReason,
+//                       NO_CHATS_MESSAGE, plural, leftMessage, isNegotiation,
 //                       listReasons, canLeave, buildChats, newScan,
-//                       accumulatePage. Старая START_MESSAGE удалена:
-//                       стартовой плашки «работает автоматическая очистка»
-//                       больше нет.
+//                       accumulatePage.
 //
 //   globalServiceVars — приходит со стороны сайта hh.ru, расширением не создаётся.
 //                       В cleaner.js читается defensively (getXsrf),

@@ -43,9 +43,10 @@
  *
  * Перехват ставится на document_start — до кода сайта, поэтому не
  * пропускается ни первый запрос списка, ни сам факт открытия страницы.
- * Своих запросов к списку у расширения нет: ни XHR, ни fetch,
- * поэтому перехват не может принять собственный обход за загрузку
- * сайта.
+ * Если страница загружена, а первая пачка всё равно не перехватилась
+ * (пришла через SSR, не XHR/fetch), расширение делает ровно один свой
+ * fetch к списку — он же сам себя и перехватывает (через hookFetch),
+ * это безопасно и не порождает петель.
  *
  * Повторные заходы безопасны: покинутый чат просто исчезает из списка,
  * а каждый следующий xhr-ответ страницы — самостоятельная пачка.
@@ -212,13 +213,16 @@
       s.opacity = '1';
       s.transform = 'translateY(0)';
     });
+    // Время видимости по типу: зелёный 'ok' исчезает раньше (1 с),
+    // красный 'left' и все прочие — как раньше, TOAST_MS (5 с).
+    var visibleMs = kind === 'ok' ? 1000 : TOAST_MS;
     setTimeout(function () {
       s.opacity = '0';
       s.transform = 'translateY(-6px)';
       setTimeout(function () {
         if (el.parentNode) el.parentNode.removeChild(el);
       }, TOAST_FADE_MS + 30);
-    }, TOAST_MS);
+    }, visibleMs);
   }
 
   /* ------------------------------------------------------------------ */
@@ -261,12 +265,22 @@
   // Единственная точка реакции: «сайт загрузил страницу чатов».
   // data — ответ /chatik/api/chats, прочитанный прямо из перехваченного
   // xhr (xhr.responseText) или fetch-ответа сайта (r.clone().json()) —
-  // без повторного запроса. Счёт «покинуто» идёт по ответу /bulk/leave:
-  // applied — id чатов, реально покинутых сервером.
+  // без повторного запроса; несёт флаг __hhOnChatPage: запрос ушёл со
+  // страницы чатов (снят в момент СЕНД, в hookXHR/hookFetch — к ответу
+  // SPA может уже подвинуть location.pathname, и живая проверка по пути
+  // теряла первую пачку).
+  // Счёт «покинуто» идёт по ответу /bulk/leave: applied — id чатов,
+  // принятых API; расширением не верифицируется перечитыванием списка.
   // Если предыдущая пачка ещё обрабатывается, новая встаёт в очередь
   // pending и будет обработана, как только закончится текущая.
   function processBatch(data) {
-    if (!isChatPage()) return;
+    if (!data || !data.__hhOnChatPage) {
+      // запрос не со страницы чатов (или тело не объект) — «не уверен»:
+      // пачка не обрабатывается, ничего не сломано
+      dbg('пропуск: запрос списка не со страницы чатов' +
+        (data ? '': ', тело не объект; путь «' + location.pathname + '»'));
+      return;
+    }
     if (running) {
       // предыдущая пачка ещё обрабатывается (leaveChats идёт с паузами
       // между чанками) — эта не теряется: встаёт в очередь и будет
@@ -282,6 +296,7 @@
   // (verdicts.js), покидание — POST /chatik/api/bulk/leave, и ровно
   // одна плашка на пачку.
   function runBatch(data) {
+    processedCount++;
 
     var scan = V.newScan();
     V.accumulatePage(scan, data);
@@ -330,11 +345,6 @@
         toast(V.NO_CHATS_MESSAGE, 'ok');
       }
       done();
-    }, function (e) {
-      // отправка не удалась — никто не покинут
-      console.warn(LOG + 'не удалось отправить чаты на покидание: ' + msg(e));
-      toast(V.NO_CHATS_MESSAGE, 'ok');
-      done();
     });
   }
 
@@ -342,10 +352,11 @@
   /* поводы: активность списка                                           */
   /* ------------------------------------------------------------------ */
 
-  // Своих запросов к списку у расширения нет (ни XHR, ни fetch),
-  // поэтому любой GET к /chatik/api/chats — это сайт. Годится и первая
-  // выдача, и страница очередной порции (from=). Перехват работает,
-  // только если браузер исполняет "world": "MAIN".
+  // Единственный свой запрос к списку — первичный fetch при загрузке
+  // страницы (maybeMakeInitRequest), и он намеренно пропускается через
+  // тот же hookFetch — его ответ обрабатывается как обычная пачка.
+  // Поэтому любой GET к /chatik/api/chats обрабатывается одинаково.
+  // Перехват работает только в "world": "MAIN".
   function isListRequest(url, method) {
     if (!url) return false;
     if ((method || 'GET').toUpperCase() !== 'GET') return false;
@@ -362,6 +373,27 @@
   // идёт обработка очередной пачки.
   var pending = [];
   var running = false;
+
+  /* ------------------------------------------------------------------ */
+  /* первичная загрузка: если первая пачка не перехватилась               */
+  /* ------------------------------------------------------------------ */
+
+  // Счётчик обработанных пачек. Если после загрузки страницы он
+  // нулевой — ни один хук не перехватил список, значит первая пачка
+  // пришла не через XHR/fetch. Делаем один свой fetch.
+  var processedCount = 0;
+  var initRequestMade = false;
+
+  function maybeMakeInitRequest() {
+    if (initRequestMade) return;
+    initRequestMade = true;
+    if (!isChatPage() || processedCount > 0) return;
+    // Делаем свой fetch — он пойдёт через обёрнутый hookFetch и будет
+    // обработан как обычная пачка (processBatch → runBatch).
+    dbg('первичная пачка: делаем свой fetch');
+    window.fetch(API + '/chats', { credentials: 'include' })
+      .catch(function () {});  // ошибка — не страшно, следующая XHR-пачка догонит
+  }
 
   /* ------------------------------------------------------------------ */
   /* перехват запросов списка сайтом (main-world)                        */
@@ -381,8 +413,20 @@
     proto.send = function () {
       if (this.__hhListRequest) {
         var xhr = this;
+        // Страницность берём сейчас, в момент send: к ответу путь
+        // уже может смениться
+        var onChatPage = isChatPage();
         xhr.addEventListener('load', function () {
-          if (xhr.status < 200 || xhr.status >= 300) return;
+          // диагностика: фиксируем КАЖДЫЙ перехваченный GET списка и его
+          // статус — видно, пришёл ли первый запрос и с каким кодом
+          dbg('xhr список: ' + tag(xhr.responseURL || '') +
+            ', статус ' + xhr.status);
+          if (xhr.status < 200 || xhr.status >= 300) {
+            // не 2xx — «не уверен»: тело не читаем, пачка не
+            // обрабатывается
+            dbg('пропуск: статус ' + xhr.status + ' вне 200-299');
+            return;
+          }
           var data = null;
           try {
             data = JSON.parse(xhr.responseText);
@@ -392,6 +436,11 @@
             dbg('ответ списка не читается как JSON — пропуск');
             return;
           }
+          // Страницность берётся из момента send: к ответу путь уже
+          // мог смениться
+          if (data && typeof data === 'object' && !Array.isArray(data)) {
+            data.__hhOnChatPage = onChatPage;
+          }
           processBatch(data);
         });
       }
@@ -400,21 +449,36 @@
     proto.__hhHooked = true;
   }
 
-  // Перехват fetch — на случай, если сайт когда-нибудь сменит транспорт.
+  // Перехват fetch — на случай, если сайт когда-нибудь сменит транспорт,
+  // и для собственного первичного fetch (см. maybeMakeInitRequest).
   // Тело чужого ответа берём из памяти (r.clone().json()) — это не
   // сетевой вызов; оригинальный ответ возвращаем сайту как есть.
-  // Своих fetch-обходов у расширения нет, исключать нечего.
+  // Свой fetch (первичная загрузка) намеренно пропускается через этот
+  // же перехват — так он попадает в стандартную процедуру обработки.
   function hookFetch() {
     if (typeof window.fetch !== 'function' || window.fetch.__hhHooked) return;
     var orig = window.fetch;
     var wrapped = function (input, init) {
       var url = typeof input === 'string' ? input : (input && input.url);
       var method = (init && init.method) || (input && input.method) || 'GET';
+      // Страницность берём в момент вызова: к ответу путь уже мог
+      // смениться
+      var onChatPage = isChatPage();
       var p = orig.apply(this, arguments);
       if (isListRequest(url, method)) {
         p.then(function (r) {
-          if (!r || !r.ok) return;
+          // диагностика: фиксируем fetch-ответ списка и его статус
+          dbg('fetch списка: ' + tag(url || '') +
+            ', статус ' + (r && r.status));
+          // не 2xx — «не уверен»
+          if (!r || !r.ok) {
+            dbg('пропуск (fetch): ' + (r ? 'статус ' + r.status : 'нет ответа'));
+            return;
+          }
           r.clone().json().then(function (data) {
+            if (data && typeof data === 'object' && !Array.isArray(data)) {
+              data.__hhOnChatPage = onChatPage;
+            }
             processBatch(data);
           }, function () {
             // не читается как JSON — «не уверен»: пачка не
@@ -433,13 +497,26 @@
   /* запуск перехвата                                                     */
   /* ------------------------------------------------------------------ */
 
-  // Перехват ставится на document_start — до кода сайта, поэтому
-  // не пропускается ни первый запрос списка, ни сам факт открытия
-  // страницы чатов.
   dbg('запуск: ' +
     (typeof window.chrome !== 'undefined' && window.chrome.runtime && window.chrome.runtime.id
       ? 'изолированный мир' : 'главный мир') +
     ', путь ' + location.pathname);
   hookXHR();
   hookFetch();
+
+  // Если первая пачка загружается не через XHR/fetch, а через SSR или
+  // иной механизм, хуки её не перехватят. Ставим отложенный fetch.
+  if (isChatPage()) {
+    dbg('на странице чатов — запланирован первичный fetch списка');
+    var scheduleInit = function () {
+      setTimeout(maybeMakeInitRequest, 500);
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', scheduleInit, { once: true });
+    } else {
+      scheduleInit();
+    }
+  } else {
+    initRequestMade = true;  // не на странице чатов — запрос не нужен
+  }
 })();
