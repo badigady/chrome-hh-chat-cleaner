@@ -9,10 +9,11 @@
 //                       В cleaner.js читается defensively (строки 127-129),
 //                       поэтому каждое поле — необязательное.
 //
-//   __hhHooked / __hhListRequest — метки расширения на прототипах. Их ставит
-//                       hookXHR/hookFetch, чтобы не перехватить XHR дважды.
-//                       Нативные объекты браузера таких полей не имеют —
-//                       объявляем, иначе каждое обращение даёт ошибку TS2339.
+//   __hhHooked / __hhListRequest / __hhCursor — метки расширения на прототипах.
+//                       Их ставит hookXHR/hookFetch: не перехватить XHR дважды,
+//                       помнить, запрос какой страницы перехвачен. Нативные
+//                       объекты браузера таких полей не имеют — объявляем,
+//                       иначе каждое обращение даёт ошибку TS2339.
 //
 //   chrome.runtime      — есть только у content script в изолированном мире;
 //                       в главном мире страницы chrome.runtime отсутствует.
@@ -35,6 +36,7 @@ declare global {
   interface XMLHttpRequest {
     __hhHooked?: boolean;
     __hhListRequest?: boolean;
+    __hhCursor?: string | null;
   }
 }
 

@@ -29,27 +29,25 @@
  *   1. при входе на страницу чатов — сразу: первой же показывается плашка
  *      «работает автоматическая очистка чатов» и запускается обход (вход на
  *      страницу и есть загрузка списка);
- *   2. при прокрутке списка и догрузке очередной порции чатов — список
- *      читается заново;
- *   3. когда сам сайт заново запрашивает список чатов (`GET
- *      /chatik/api/chats`).
+ *   2. когда сам сайт загружает страницу чатов — подгружает очередную
+ *      пачку (по 20 чатов, в том числе периодически, без нашего участия) —
+ *      эта страница читается и обходится.
  *
- * Поводы 2 и 3 намеренно не зависят от «мира» content script. Список у
- * сайта виртуализирован (строки пересоздаются при прокрутке), поэтому
- * слушаются прокрутка контейнера (capture-фаза — событие scroll не
- * всплывает), изменения DOM внутри контейнера и — самый надёжный сигнал,
- * который браузер не может «проглотить», — раз в полторы секунды
- * читаются scrollTop (прокрутили) и scrollHeight (догрузили). Перехват
- * XMLHttpRequest/fetch оставлен как дополнительный, быстрый повод там,
- * где он работает. Смена адреса внутри приложения отслеживается опросом
- * location.href — тоже из любого мира.
+ * Работает только при загрузке страницы: какую страницу сайт загрузил —
+ * ту расширение и обходит. Вглубь курсорной пагинацией оно не ходит и
+ * ничего не делает от простой прокрутки. Слежения за адресом, событиями
+ * прокрутки и мутациями DOM нет — только загрузка страницы.
+ *
+ * Загрузка страницы ловится перехватом запроса списка самим сайтом
+ * (`GET /chatik/api/chats`): расширение перехватывает XHR/fetch, извлекает из
+ * URL курсор загруженной страницы (`from`) и обрабатывает ровно её. Никаких
+ * переборов и лишних событий. Перехват работает там, где браузер исполняет
+ * "world": "MAIN" (Chrome, Edge).
  *
  * Перехват и отметка «мы на странице чатов» ставятся на document_start —
  * до кода сайта, поэтому не пропускается ни первый запрос списка, ни сам
  * факт открытия страницы. Свои обходы идут через fetch и за повод не
- * принимаются (счётчик scanRequests); все поводы сводятся к одному
- * отложенному обходу с «дебаунсом» (SETTLE_MS «тишины», не чаще
- * MIN_INTERVAL_MS).
+ * принимаются (счётчик scanRequests).
  *
  * Повторные заходы безопасны: покинутый чат просто исчезает из списка, а
  * каждый обход читает список заново. Никакого локального списка «уже
@@ -78,17 +76,6 @@
   var LEAVE_CHUNK = 20;
   // пауза между пачками покидания, чтобы не лить запросы подряд
   var LEAVE_DELAY_MS = 700;
-  // потолок на число страниц списка — защита от зацикливания пагинации: если
-  // сервер начнёт повторять курсор, обход остановится ошибкой (и ничего не
-  // будет покинуто), а не бесконечным потоком запросов. На живом аккаунте
-  // страниц ~46.
-  var MAX_PAGES = 200;
-
-  // «Тишина» после последней активности списка перед обходом: каждая новая
-  // прокрутка или догрузка перезапускает отсчёт (дебаунс).
-  var SETTLE_MS = 4000;
-  // не чаще одного обхода в это время
-  var MIN_INTERVAL_MS = 15000;
 
   // путь запроса, которым сайт ходит за списком чатов
   var LIST_PATH = '/chatik/api/chats';
@@ -231,9 +218,10 @@
     s.borderRadius = '8px';
     s.font = '14px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
     s.color = '#fff';
-    s.background = kind === 'ok'   ? '#1f7a3d'
-                 : kind === 'warn' ? '#9a5b00'
-                 : 'rgba(20, 20, 20, 0.92)';
+    s.background = kind === 'ok'   ? '#1f7a3d'      // зелёный — всё в порядке
+                 : kind === 'left' ? '#c0392b'      // красный — покинули чаты
+                 : kind === 'warn' ? '#9a5b00'      // жёлтый — внимание
+                 : 'rgba(20, 20, 20, 0.92)';         // нейтральный
     s.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.28)';
     s.opacity = '0';
     s.transform = 'translateY(-6px)';
@@ -259,40 +247,27 @@
   /* сбор списка                                                         */
   /* ------------------------------------------------------------------ */
 
-  // Курсорная пагинация: сервер отдаёт nextFrom, по нему берётся следующая
-  // страница. Возвращает весь список одним проходом.
-  //
+  // Курсор последней прочитанной страницы (для перечитывания при проверке).
+  var lastReadFrom = null;
+
+  // Читает одну страницу списка по курсору (null — первую). Своей
+  // пагинацией вглубь не ходит: какую страницу загрузил сайт — ту и читаем.
   // Ресурсы и заголовки лежат на той же странице, что и сами чаты, поэтому
-  // ключ чата может оказаться на любой из ~46 страниц. Накопление живёт в
-  // verdicts.js (newScan/accumulatePage), чтобы оно было покрыто тестом:
-  // перезапись содержимого последней страницей вместо слияния оставляет
-  // признаки в нуле — на последней странице ~15 записей из 915, и ключа
-  // archived среди них может не быть. Такую ошибку уже допускали.
-  function listAllChats() {
-    var items = [], from = null, pages = 0, found = 0;
+  // признак ищется в рамках прочитанной страницы.
+  function readPage(cursor) {
     var scan = V.newScan();
-
-    function step() {
-      if (++pages > MAX_PAGES) {
-        return Promise.reject(new Error('список чатов не заканчивается (страниц больше ' +
-          MAX_PAGES + ') — обход остановлен'));
-      }
-      var url = LIST_URL + (from ? '&from=' + encodeURIComponent(from) : '');
-      return getJSON(url).then(function (j) {
-        var page = (j.chats && j.chats.items) || [];
-        if (pages === 1) found = (j.chats && j.chats.found) || 0;
-        for (var i = 0; i < page.length; i++) items.push(page[i]);
-        V.accumulatePage(scan, j);
-
-        from = j.chats && j.chats.nextFrom;
-        if (!from || !page.length) {
-          return { items: items, resources: scan.resources,
-                   displayInfo: scan.displayInfo, pages: pages, found: found };
-        }
-        return step();
-      });
-    }
-    return step();
+    var url = LIST_URL + (cursor ? '&from=' + encodeURIComponent(cursor) : '');
+    return getJSON(url).then(function (j) {
+      var items = (j.chats && j.chats.items) || [];
+      V.accumulatePage(scan, j);
+      return {
+        items: items,
+        resources: scan.resources,
+        displayInfo: scan.displayInfo,
+        pages: 1,
+        found: (j.chats && j.chats.found) || 0
+      };
+    });
   }
 
   /* ------------------------------------------------------------------ */
@@ -334,7 +309,8 @@
   // из него исчезнуть.
   function verifyGone(ids) {
     if (!ids.length) return Promise.resolve({ gone: [], leftOver: [] });
-    return listAllChats().then(function (all) {
+    // перечитываем ту же страницу, с которой покидали
+    return readPage(lastReadFrom).then(function (all) {
       var present = {};
       all.items.forEach(function (it) { present[String(it.id)] = true; });
       var gone = [], leftOver = [];
@@ -347,18 +323,18 @@
   /* один проход                                                         */
   /* ------------------------------------------------------------------ */
 
-  // Плашка «чистить нечего» — один раз за вход на страницу, чтобы не
-  // повторяться на каждой прокрутке.
+  // Плашка «чистить нечего» — один раз за вход на страницу.
   var nothingTold = false;
 
   function toastNothing() {
     if (nothingTold) return;
     nothingTold = true;
-    toast('hh: чистить нечего — ненужных чатов нет');
+    toast('hh: нет чатов, которые нужно покинуть', 'ok');
   }
 
-  function runCycle(why) {
-    return listAllChats().then(function (all) {
+  function runCycle(why, cursor) {
+    return readPage(cursor).then(function (all) {
+      lastReadFrom = cursor;
       var chats = V.buildChats(all.items, all.resources, all.displayInfo);
 
       var ids = [], blocked = 0;
@@ -368,8 +344,8 @@
         else blocked++;
       });
 
-      dbg('обход (' + why + '): страниц ' + all.pages +
-        ', чатов ' + all.items.length + (all.found ? ' из ' + all.found : '') +
+      dbg('обход (' + why + '): чатов на странице ' + all.items.length +
+        (all.found ? ' из ' + all.found : '') +
         ', откликов ' + chats.length + ', к покиданию ' + ids.length +
         (blocked ? ' (сервер не разрешает ' + blocked + ')' : ''));
 
@@ -400,7 +376,7 @@
             (ver.leftOver.length ? ', остались в списке: ' + ver.leftOver.length : '') +
             (res.rejected ? ', отклонено сервером: ' + res.rejected : ''));
           if (ver.gone.length) {
-            toast(V.leftMessage(ver.gone.length), 'ok');
+            toast(V.leftMessage(ver.gone.length), 'left');
           } else {
             toast('hh: покидание не подтвердилось — чаты остались в списке', 'warn');
           }
@@ -429,78 +405,34 @@
     return String(url).indexOf(LIST_PATH) !== -1;
   }
 
+  // Курсор страницы из URL запроса сайта (null — первая страница).
+  function listCursor(url) {
+    var m = String(url).match(/[?&]from=([^&]+)/);
+    return m ? decodeURIComponent(m[1]) : null;
+  }
+
   function isChatPage() {
     return /^\/chat(\/|$)/.test(location.pathname);
   }
 
-  var pendingTimer = null;
-  var lastRunAt = 0;
-  var running = false;
   var announced = false;
+  var running = false;
   var pendingWhy = null;
-  var fireAt = 0;
-  var rescheduleAfter = false;
-  var lastLoggedWhy = null;
-  var lastReasonLogAt = 0;
+  var pendingCursor = null;
 
-  // Свести все поводы к одному отложенному проходу. Время обхода назначается
-  // по ПЕРВОМУ поводу пачки и не отодвигается следующими («дебаунс с
-  // потолком»): непрерывная прокрутка не сбрасывает таймер бесконечно.
-  // Обход стартует через SETTLE_MS после первого повода (или раньше, если
-  // с прошлого обхода уже прошло MIN_INTERVAL_MS) — даже если список всё ещё
-  // листают.
-  function schedule(why) {
+  // Единственный повод — загрузка страницы чатов. Реагируем только на неё:
+  // никаких слежений за адресом, прокруткой и прочими событиями.
+  function trigger(why, cursor) {
     if (!isChatPage()) return;
-    pendingWhy = why;
-    var now = Date.now();
-    // Повод пишем в лог, когда он сменился или повторился после паузы —
-    // иначе непрерывная прокрутка зальёт консоль одинаковыми строками.
-    if (why !== lastLoggedWhy || now - lastReasonLogAt > 10000) {
-      lastLoggedWhy = why;
-      lastReasonLogAt = now;
-      dbg('повод: ' + why);
-    }
-    if (running) { rescheduleAfter = true; return; }
-    var fire = Math.max(now + SETTLE_MS, lastRunAt + MIN_INTERVAL_MS);
-    if (pendingTimer && fire >= fireAt) return; // пачка уже учтена
-    if (pendingTimer) clearTimeout(pendingTimer);
-    fireAt = fire;
-    pendingTimer = setTimeout(function () {
-      pendingTimer = null;
-      if (running) return;
-      running = true;
-      lastRunAt = Date.now();
-      var w = pendingWhy;
-      dbg('старт обхода (' + w + ')');
-      var done = function () {
-        running = false;
-        // поводы, пришедшие во время обхода, не теряются
-        if (rescheduleAfter) { rescheduleAfter = false; schedule(pendingWhy); }
-      };
-      runCycle(w).then(done, done);
-    }, fire - now);
-  }
-
-  // Повод к работе: сначала обещанная плашка о старте (один раз за вход),
-  // затем отложенный обход. Срабатываем только на странице чатов.
-  function trigger(why) {
-    if (!isChatPage()) return;
+    if (running) { pendingWhy = why; pendingCursor = cursor; return; } // обход идёт — после него повторим
     if (!announced) { announced = true; toast(V.START_MESSAGE); }
-    schedule(why);
-  }
-
-  // Вход на страницу чатов — сразу уведомляем и запускаем первый обход
-  // (вход на страницу и есть загрузка списка). Уход со страницы сбрасывает
-  // отметки, чтобы при следующем входе всё повторилось, и снимает ещё не
-  // сработавший обход.
-  function onRouteChange() {
-    if (isChatPage()) {
-      nothingTold = false;
-      trigger('страница чатов открыта');
-    } else {
-      announced = false;
-      if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
-    }
+    dbg('повод: ' + why + (cursor ? ' (страница ' + cursor.slice(0, 24) + '…)' : ''));
+    running = true;
+    var done = function () {
+      running = false;
+      if (pendingWhy) { var w = pendingWhy, c = pendingCursor; pendingWhy = null; pendingCursor = null; trigger(w, c); }
+    };
+    runCycle(why, cursor).then(done, done);
   }
 
   /* ------------------------------------------------------------------ */
@@ -515,14 +447,15 @@
     var open = proto.open, send = proto.send;
     proto.open = function (method, url) {
       this.__hhListRequest = isListRequest(url, method);
+      this.__hhCursor = listCursor(url);
       return open.apply(this, arguments);
     };
     proto.send = function () {
       if (this.__hhListRequest) {
-        var xhr = this;
+        var xhr = this, cursor = this.__hhCursor;
         xhr.addEventListener('load', function () {
           if (xhr.status >= 200 && xhr.status < 300) {
-            trigger('сайт запросил список чатов');
+            trigger('сайт загрузил страницу', cursor);
           }
         });
       }
@@ -542,8 +475,9 @@
       var mine = scanRequests > 0;
       var p = orig.apply(this, arguments);
       if (!mine && isListRequest(url, method)) {
+        var cursor = listCursor(url);
         p.then(function (r) {
-          if (r && r.ok) trigger('сайт запросил список чатов');
+          if (r && r.ok) trigger('сайт загрузил страницу', cursor);
         }, function () {});
       }
       return p;
@@ -552,92 +486,9 @@
     window.fetch = wrapped;
   }
 
-  // Смена адреса внутри приложения без перезагрузки страницы.
-  function hookHistory() {
-    var push = history.pushState, replace = history.replaceState;
-    history.pushState = function () {
-      var r = push.apply(this, arguments); onRouteChange(); return r;
-    };
-    history.replaceState = function () {
-      var r = replace.apply(this, arguments); onRouteChange(); return r;
-    };
-    window.addEventListener('popstate', onRouteChange);
-  }
-
   /* ------------------------------------------------------------------ */
-  /* наблюдение за активностью списка (не зависит от main-world)         */
+  /* догрузка страницы сайтом (не зависит от main-world)                 */
   /* ------------------------------------------------------------------ */
-
-  // Контейнер списка у сайта виртуализирован: строки пересоздаются при
-  // прокрутке, поэтому «число строк» — не признак догрузки. Зато и сама
-  // прокрутка, и любые изменения внутри контейнера — это активность списка.
-  function isListEl(el) {
-    if (!el || el.nodeType !== 1) return false;
-    var cn = (el.getAttribute && el.getAttribute('class')) || '';
-    return cn.indexOf('scroll-container') !== -1 || cn.indexOf('chats--') !== -1;
-  }
-
-  // Событие scroll не всплывает, поэтому слушаем в capture-фазе на документе.
-  function watchScroll() {
-    document.addEventListener('scroll', function (e) {
-      if (isListEl(e.target)) schedule('список пролистан');
-    }, { capture: true, passive: true });
-  }
-
-  var listObserver = null;
-  var observedEl = null;
-
-  // Наблюдение за контейнером списка: ловим догрузку и перерисовку строк.
-  // Контейнер появляется не сразу и может пересоздаваться при переходах,
-  // поэтому раз в секунду сверяемся (это дёшево).
-  function ensureListObserver() {
-    var el = document.querySelector('[class*="scroll-container"]');
-    if (!el || el === observedEl) return;
-    if (listObserver) listObserver.disconnect();
-    observedEl = el;
-    listObserver = new MutationObserver(function () {
-      schedule('список чатов изменился');
-    });
-    listObserver.observe(el, { childList: true, subtree: true });
-    dbg('наблюдаю за контейнером списка');
-  }
-
-  var lastListSig = null; // {el, h, t} — отметка последней проверки контейнера
-
-  // Самый надёжный, не зависящий от событий и от «мира» сигнал активности
-  // списка: прокрутка меняет scrollTop, догрузка — scrollHeight. Чтение двух
-  // свойств раз в полторы секунды браузер «проглотить» не может, в отличие
-  // от событий scroll и мутаций.
-  function checkListActivity() {
-    ensureListObserver();
-    var el = document.querySelector('[class*="scroll-container"]');
-    if (!el) return;
-    var h = el.scrollHeight, t = el.scrollTop;
-    var sig = lastListSig;
-    if (sig && sig.el === el) {
-      if (h > sig.h) schedule('список догрузился');
-      else if (t !== sig.t) schedule('список пролистан');
-    }
-    lastListSig = { el: el, h: h, t: t };
-  }
-
-  function watchList() {
-    watchScroll();
-    ensureListObserver();
-    checkListActivity(); // запомнить отметку
-    setInterval(checkListActivity, 1500);
-  }
-
-  // Смена адреса внутри SPA — опросом, чтобы не зависеть от main-world.
-  function watchRoute() {
-    var last = location.href;
-    setInterval(function () {
-      if (location.href === last) return;
-      last = location.href;
-      dbg('адрес сменился: ' + location.href);
-      onRouteChange();
-    }, 1000);
-  }
 
   // Всё ставится на document_start — до кода сайта, поэтому не пропускается
   // ни первый запрос списка, ни сам факт открытия страницы чатов.
@@ -647,8 +498,4 @@
     ', путь ' + location.pathname);
   hookXHR();
   hookFetch();
-  hookHistory();
-  watchList();
-  watchRoute();
-  onRouteChange();
 })();
