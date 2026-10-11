@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": false,
+    "types": []
+  },
+  "include": ["cleaner.js", "verdicts.js", "types/**/*.d.ts"],
+  "exclude": ["node_modules", "test", "icons"]
+}
