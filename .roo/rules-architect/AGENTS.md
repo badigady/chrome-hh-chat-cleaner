@@ -15,7 +15,7 @@ Pure decision layer (`verdicts.js`) over list-response data + I/O layer (`cleane
 
 - `manifest.json` ↔ `cleaner.js`: content script must be `run_at: document_start` + `world: "MAIN"` (`manifest.json:16-23`). `document_start` is required so the XHR/fetch hooks beat the site's first list request; `world: MAIN` is required to touch the site's `XMLHttpRequest`/`fetch` at all. Change either and the extension silently dies.
 - `cleaner.js` ↔ `verdicts.js` order in `manifest.json` `content_scripts.js` (verdicts first): `cleaner.js` hard-aborts on missing `window.HhVerdicts`.
-- `verdicts.js` ↔ `types/global.d.ts`: the d.ts derives `HhVerdicts` from the UMD export of `verdicts.js` (`import type * as Verdicts from '../verdicts.js'`) precisely to avoid duplicating the API surface — rename a verdicts export and the type check fails there, by design.
+- `verdicts.js` ↔ `types/global.d.ts`: the d.ts derives `HhVerdicts` from the UMD export of `verdicts.js` (`import type * as Verdicts from '../src/verdicts.js'`) precisely to avoid duplicating the API surface — rename a verdicts export and the type check fails there, by design.
 - Chunk size 20, 700 ms inter-chunk pause: copied from the site's own bulk-leave behavior (`docs/bulk-leave.md` §5.1, §5.3: site also stops the whole loop on the first chunk error). Diverging risks server-side throttling and changes the failure semantics (unprocessed-vs-rejected counts).
 
 ## Deliberate decisions with bug history (don't "simplify")
